@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+
+# uv
+.python-version
+
+# Node.js
+node_modules/
+
+# Environment variables
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files
+*.csv
+*.parquet
+*.h5
+*.hdf5
+
+# Logs
+*.log

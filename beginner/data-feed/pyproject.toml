@@ -1,0 +1,13 @@
+[project]
+name = "data-feed"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "rich>=14.3.2",
+    "sortedcontainers>=2.4.0",
+    "websocket>=0.2.1",
+    "websocket-client>=1.9.0",
+    "websockets>=16.0",
+]

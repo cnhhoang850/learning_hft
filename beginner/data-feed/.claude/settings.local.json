@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(where:*)",
+      "Bash(choco --version:*)",
+      "Bash(choco install:*)",
+      "Bash(winget --version:*)",
+      "Bash(winget install:*)"
+    ]
+  }
+}
