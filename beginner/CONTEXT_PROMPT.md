@@ -34,5 +34,52 @@ Act as a senior developer mentoring me through building HFT (High Frequency Trad
 - Libraries: websocket-client, sortedcontainers, rich
 - Working directory: learning_hft/
 
-## What's next
-I'm ready for the next beginner HFT project. Suggest what I should build next and guide me through it step by step.
+### Project 2: Historical Data Pipeline — IN PROGRESS (beginner/historicalETL/)
+Building an ETL pipeline that ingests, cleans, and stores OHLCV data into a time-series DB.
+
+#### What I've built so far:
+- **models.py** — `Candle` dataclass (symbol, open_time, open_price, high_price, low_price, close_price, volume, close_time, number_of_trades)
+- **extract.py** — Complete extraction layer:
+  - `fetch_historical_data()` — raw REST call to Binance `/api/v3/klines`
+  - `process_candle_binance()` — maps Binance array response to `Candle` dataclass (index-based mapping)
+  - `get_start_end_of_month_timestamps()` — generates start/end ms timestamps for a given month/year, defaults to current month
+  - `fetch_binance_candles_monthly()` — paginated fetch (loops in batches of 1000, advances `startTime` by last candle's `open_time + 1`)
+- **transform.py** — Quality checks (partially complete):
+  - `check_candle_data_quality()` — validates OHLC consistency (high >= open/low/close), negative volume, null fields
+  - `check_mising_minutes()` — gap detection between consecutive candles (expects 60,000ms intervals)
+- **main.py** — Thin orchestrator that calls extract then runs quality checks
+
+#### Concepts I now understand:
+- OHLCV candle structure and what each field represents
+- ETL pattern — Extract/Transform/Load with separation of concerns
+- Pagination for REST APIs (Binance 1000 candle limit per request)
+- Data normalization — one parser per exchange, all output same `Candle` dataclass
+- Why time-series databases exist (chunk-based storage, compression, time-range query optimization)
+- Data quality matters: garbage in = garbage out for backtesting
+- Clean before load, not after (cheaper in memory, enforces schema, limits blast radius of bad data)
+
+#### Review feedback to address (next steps):
+1. **Missing low_price check** — need to validate `low <= open, high, close` (only checking high currently)
+2. **No duplicate detection** — need to check for candles with same `open_time`
+3. **Refactor quality check loop** — the `for field in __dataclass_fields__` pattern is over-engineered; use explicit checks instead
+4. **Typo** — `check_mising_minutes` → `check_missing_minutes`
+5. **Decide bad candle strategy** — drop, flag, or fail pipeline? (need to think about: wrong data is worse than missing data for trading)
+6. **Print timestamp bug** — `datetime.fromtimestamp()` shows local time but label says UTC; use `datetime.fromtimestamp(ts/1000, tz=timezone.utc)` instead
+
+#### Still TODO:
+- Fix quality checks per review feedback above
+- Build `load.py` — choose TimescaleDB or QuestDB, set up Docker container, create table schema, implement idempotent inserts
+- Build `quality.py` if separating quality checks from transform
+- Wire up full pipeline in `main.py`: extract → transform/validate → load
+- Add basic logging instead of print statements
+
+#### Key design decisions made:
+- Using `float` for prices (aware of precision issues, `Decimal` for production)
+- Timestamps stored as `int` (ms) in dataclass, conversion to `datetime` happens in transform
+- One parser function per exchange for normalization
+- Pagination uses `open_time + 1` offset to avoid duplicates
+
+## Tech stack
+- Python 3.14, uv package manager
+- Libraries: websocket-client, sortedcontainers, rich, requests
+- Working directory: learning_hft/
