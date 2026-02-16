@@ -6,6 +6,11 @@ def check_candle_data_quality(candle):
     open_price = candle.open_price
     low_price = candle.low_price
     volume = candle.volume
+    
+    # catch nulls explicitly first
+    if any (value is None for value in (high_price, close_price, open_price, low_price, volume)):
+        print(f"Data quality issue: A field is None in candle {candle}")
+        return False
 
     if (high_price - open_price < 0
         or high_price - close_price < 0
@@ -23,12 +28,9 @@ def check_candle_data_quality(candle):
         print(f"Data quality issue: volume {candle.volume} is negative in candle {candle}")
         return False
 
-    if any (value is None for value in (high_price, close_price, open_price, low_price, volume)):
-        print(f"Data quality issue: {field} is None in candle {candle}")
-        return False
     return True
         
-def check_mising_minutes(candles): 
+def check_missing_minutes(candles): 
     if not candles:
         print("No candles to check for missing minutes.")
         return
@@ -42,4 +44,13 @@ def check_mising_minutes(candles):
             print(f"Missing minutes detected between {datetime.fromtimestamp(candles[i-1].open_time/1000)} and {datetime.fromtimestamp(candles[i].open_time/1000)}. Time difference: {time_diff} ms")
 
     return True
+
+def check_duplicate_minutes(candles):
+    original_candles = len(candles)
+    unique_candles = len(set(c.open_time for c in candles))
+
+    if original_candles != unique_candles:
+        print(f"Data quality issue: There are duplicate canldes")
+
+    return False
 
