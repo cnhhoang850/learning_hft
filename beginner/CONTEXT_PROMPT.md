@@ -34,20 +34,25 @@ Act as a senior developer mentoring me through building HFT (High Frequency Trad
 - Libraries: websocket-client, sortedcontainers, rich
 - Working directory: learning_hft/
 
-### Project 2: Historical Data Pipeline — IN PROGRESS (beginner/historicalETL/)
-Building an ETL pipeline that ingests, cleans, and stores OHLCV data into a time-series DB.
+### Project 2: Historical Data Pipeline — COMPLETE (beginner/historicalETL/)
+Built an ETL pipeline that ingests, cleans, and stores OHLCV candle data into TimescaleDB.
 
-#### What I've built so far:
+#### What I built:
 - **models.py** — `Candle` dataclass (symbol, open_time, open_price, high_price, low_price, close_price, volume, close_time, number_of_trades)
 - **extract.py** — Complete extraction layer:
   - `fetch_historical_data()` — raw REST call to Binance `/api/v3/klines`
   - `process_candle_binance()` — maps Binance array response to `Candle` dataclass (index-based mapping)
   - `get_start_end_of_month_timestamps()` — generates start/end ms timestamps for a given month/year, defaults to current month
   - `fetch_binance_candles_monthly()` — paginated fetch (loops in batches of 1000, advances `startTime` by last candle's `open_time + 1`)
-- **transform.py** — Quality checks (partially complete):
-  - `check_candle_data_quality()` — validates OHLC consistency (high >= open/low/close), negative volume, null fields
-  - `check_mising_minutes()` — gap detection between consecutive candles (expects 60,000ms intervals)
-- **main.py** — Thin orchestrator that calls extract then runs quality checks
+- **transform.py** — Data quality validation:
+  - `check_candle_data_quality()` — validates OHLC consistency (high >= open/low/close, low <= open/high/close), negative volume, null fields (null check runs first to avoid TypeError)
+  - `check_missing_minutes()` — gap detection between consecutive candles (expects 60,000ms intervals)
+  - `check_duplicate_minutes()` — duplicate detection using set length comparison on `open_time`
+- **load.py** — Database loading layer:
+  - `create_candles_table()` — creates table with `IF NOT EXISTS`, composite primary key `(symbol, open_time)`
+  - `insert_candles()` — idempotent inserts using `INSERT ... ON CONFLICT DO NOTHING`, uses `dataclasses.astuple()` for value mapping
+- **main.py** — Orchestrator: extract → validate → load
+- **Database** — TimescaleDB (Postgres extension) running in Docker on port 6543, ~24,858 candles loaded
 
 #### Concepts I now understand:
 - OHLCV candle structure and what each field represents
@@ -55,31 +60,38 @@ Building an ETL pipeline that ingests, cleans, and stores OHLCV data into a time
 - Pagination for REST APIs (Binance 1000 candle limit per request)
 - Data normalization — one parser per exchange, all output same `Candle` dataclass
 - Why time-series databases exist (chunk-based storage, compression, time-range query optimization)
+- Hypertables — automatic time-based partitioning for chunk exclusion, compression, and efficient inserts
 - Data quality matters: garbage in = garbage out for backtesting
 - Clean before load, not after (cheaper in memory, enforces schema, limits blast radius of bad data)
+- Composite primary keys — `(symbol, open_time)` because multiple symbols share the same timestamps
+- Idempotent inserts — `ON CONFLICT DO NOTHING` so re-running the pipeline doesn't create duplicates
+- Duplicate detection — set-based O(n) approach vs O(n log n) sort-based
+- Database transactions — batch all inserts, commit once (not per row)
+- Never use f-strings for SQL values (SQL injection) — use parameterized queries with `%s` placeholders
+- Error handling philosophy in ETLs — let it crash on infra failures (DB down, bad SQL), only handle expected data issues
 
-#### Review feedback to address (next steps):
-1. **Missing low_price check** — need to validate `low <= open, high, close` (only checking high currently)
-2. **No duplicate detection** — need to check for candles with same `open_time`
-3. **Refactor quality check loop** — the `for field in __dataclass_fields__` pattern is over-engineered; use explicit checks instead
-4. **Typo** — `check_mising_minutes` → `check_missing_minutes`
-5. **Decide bad candle strategy** — drop, flag, or fail pipeline? (need to think about: wrong data is worse than missing data for trading)
-6. **Print timestamp bug** — `datetime.fromtimestamp()` shows local time but label says UTC; use `datetime.fromtimestamp(ts/1000, tz=timezone.utc)` instead
-
-#### Still TODO:
-- Fix quality checks per review feedback above
-- Build `load.py` — choose TimescaleDB or QuestDB, set up Docker container, create table schema, implement idempotent inserts
-- Build `quality.py` if separating quality checks from transform
-- Wire up full pipeline in `main.py`: extract → transform/validate → load
-- Add basic logging instead of print statements
+#### Known gaps/shortcuts taken:
+- Bad candles are detected but still loaded (no filter step before insert)
+- `datetime.fromtimestamp()` shows local time but labels say UTC in extract.py and transform.py
+- Connection string hardcoded in three places (should be env var, defined once)
+- Print statements instead of proper logging
+- Row-by-row inserts (works but `execute_values` or `COPY` would be 10-50x faster at scale)
+- Single symbol (BTCUSDT), single month only — no CLI args for symbol/date range
+- `float` for prices (aware of precision issues, `Decimal` for production)
+- Table not converted to hypertable yet
+- No post-load verification (row count comparison)
+- No retry logic on Binance API calls
 
 #### Key design decisions made:
-- Using `float` for prices (aware of precision issues, `Decimal` for production)
-- Timestamps stored as `int` (ms) in dataclass, conversion to `datetime` happens in transform
+- TimescaleDB over QuestDB (Postgres ecosystem, transferable SQL skills)
+- Composite primary key `(symbol, open_time)` over synthetic auto-increment ID (natural key enables idempotency, no meaningless columns)
+- Timestamps stored as `int` (ms) in dataclass, `BIGINT` in Postgres
 - One parser function per exchange for normalization
 - Pagination uses `open_time + 1` offset to avoid duplicates
+- Each function manages its own DB connection (simple, no connection passing)
 
 ## Tech stack
 - Python 3.14, uv package manager
-- Libraries: websocket-client, sortedcontainers, rich, requests
+- Libraries: websocket-client, sortedcontainers, rich, requests, psycopg
+- Database: TimescaleDB (Docker, port 6543)
 - Working directory: learning_hft/

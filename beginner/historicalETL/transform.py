@@ -52,5 +52,5 @@ def check_duplicate_minutes(candles):
     if original_candles != unique_candles:
         print(f"Data quality issue: There are duplicate canldes")
 
-    return False
+    return True
 
