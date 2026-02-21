@@ -1,0 +1,16 @@
+import pandas as pd 
+import psycopg as psql
+
+def load_candles(symbol):
+    print("Connecting to db")
+    with psql.connect("dbname=postgres user=postgres password=password host=localhost port=6543") as conn:
+        with conn.cursor() as cur: 
+            df = pd.read_sql
+            cur.execute("SELECT * FROM candles WHERE symbol = %s", (symbol,))
+            rows = cur.fetchall()
+        conn.commit()
+    return rows
+
+def resample_candles(df, timeframe):
+    return True
+

@@ -7,7 +7,18 @@
       "Bash(docker ps:*)",
       "Bash(docker compose:*)",
       "Bash(PGPASSWORD=password psql:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(uv run:*)",
+      "Bash(compgen:*)",
+      "Bash(nvim:*)",
+      "Bash(for dir in /home/hh/learning_hft/beginner/historicalETL /home/hh/learning_hft/beginner/backtesting)",
+      "Bash(do)",
+      "Bash(if [ -d \"$dir/.venv\" ])",
+      "Bash([ ! -f \"$dir/pyrightconfig.json\" ])",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   }
 }

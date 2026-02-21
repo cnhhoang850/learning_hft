@@ -1,4 +1,7 @@
-Act as a senior developer mentoring me through building HFT (High Frequency Trading) projects in Python. Guide me but don't code for me unless I explicitly ask. Let me write the code and review it when I show you.
+Act as a senior developer mentoring me through building scalable backend systems projects. Guide me but don't code for me unless I explicitly ask. Let me write the code and review it when I show you.
+
+## Direction change
+Pivoted from HFT-specific projects to backend/scalable systems — more broadly employable, less niche. The first 3 HFT projects are still valuable foundations (real-time streaming, ETL pipelines, data processing, Postgres, Docker).
 
 ## What I've completed
 
@@ -90,8 +93,153 @@ Built an ETL pipeline that ingests, cleans, and stores OHLCV candle data into Ti
 - Pagination uses `open_time + 1` offset to avoid duplicates
 - Each function manages its own DB connection (simple, no connection passing)
 
+### Project 3: Simple Vectorized Backtester — COMPLETE (beginner/backtesting/)
+Built a vectorized backtester for a moving average crossover strategy using Pandas. Loads data from TimescaleDB, runs the strategy, and reports performance metrics.
+
+#### What I built:
+- **data_loader.py** — Data loading layer:
+  - `load_candles()` — loads candles from TimescaleDB into a Pandas DataFrame using `pd.read_sql()` with parameterized queries
+  - `resample_candles()` — aggregates 1-min candles to higher timeframes using `.resample().agg()` with OHLCV rules (open=first, high=max, low=min, close=last, volume=sum)
+- **calculation.py** — Strategy and metrics:
+  - `add_moving_average()` — computes short (20) and long (50) period rolling means on close price
+  - `generate_signals()` — generates buy (+1) / sell (-1) signals based on MA crossover, with `.shift(1)` to create position column preventing look-ahead bias
+  - `pct_change()` — computes bar-by-bar market returns via `.pct_change()`
+  - `calculate_strategy_returns()` — multiplies position by market return (vectorized, no loops)
+  - `calculate_cumulative_returns()` — compounds returns via `(1 + ret).cumprod() - 1` for both strategy and market
+  - `calculate_sharpe_ratio()` — `mean / std * sqrt(8760)` annualized for hourly crypto bars
+  - `calculate_drawdown()` — equity curve via `.cumprod()`, peak via `.cummax()`, drawdown = `(equity - peak) / peak`
+- **main.py** — Pipeline: load → resample → MAs → signals → returns → cumulative → drawdown → print metrics
+
+#### Results (BTCUSDT, ~25k 1-min candles → ~1000 hourly bars):
+- Total Return: -19.82%
+- Sharpe Ratio: 0.08
+- Max Drawdown: -69.54%
+- Conclusion: simple MA crossover is not profitable on this data — expected result, validates the backtester works correctly
+
+#### Concepts I now understand:
+- Vectorized computation — all operations on entire columns at once, no Python loops
+- Look-ahead bias — the #1 backtesting trap. `.shift(1)` enforces "decide now, act next bar"
+- Simple returns via `.pct_change()` — `(current - previous) / previous`
+- Compound returns via `.cumprod()` — more accurate than `.cumsum()` because returns compound
+- Sharpe ratio — `mean / std * sqrt(N)` measures risk-adjusted return. Mean scales linearly, std scales with sqrt(time), so annualization factor is sqrt(bars_per_year)
+- Max drawdown — worst peak-to-trough decline, measures the worst pain during the strategy
+- NaN propagation — rolling windows and shift create NaN rows that must be handled with `.fillna(0)` before `.cumprod()`
+- Boolean indexing in Pandas — `df.loc[boolean_array, column]` selects rows where True
+- OHLCV resampling rules — open=first, high=max, low=min, close=last, volume=sum
+- Why small datasets are misleading — 83 bars showed Sharpe 3.24, full dataset showed 0.08
+- Fully invested backtesting — always 100% in, either long or short, no position sizing
+- Shorting — sell/borrow first, buy back later, profit if price goes down
+
+#### Known gaps/shortcuts taken:
+- No transaction costs or slippage
+- No position sizing — always fully invested (100% capital at risk)
+- Connection string hardcoded
+- Single strategy (MA crossover), single symbol (BTCUSDT)
+- No visualization (equity curve chart)
+- Assumes ability to short (valid for futures, not all spot markets)
+- `risk_free_rate` in Sharpe defaults to 0 (fine for crypto, not for comparing with traditional assets)
+- `ORDER BY open_time DESC` in SQL — loads newest first, Pandas resample still works but sorting ASC would be more conventional
+
+#### Key design decisions made:
+- Vectorized over event-driven backtester (simpler, faster for this use case)
+- Separate files for data loading vs calculation logic
+- Functions return df for chaining (pipeline pattern)
+- Annualization factor 8760 for crypto (24 * 365, not 252 stock trading days)
+- `fillna(0)` only on return columns, not entire DataFrame (preserves MA NaN values)
+- Compound returns (`cumprod`) over additive (`cumsum`) for accuracy
+
 ## Tech stack
-- Python 3.14, uv package manager
-- Libraries: websocket-client, sortedcontainers, rich, requests, psycopg
-- Database: TimescaleDB (Docker, port 6543)
+- **Projects 1-3 (completed):** Python 3.14, uv, websocket-client, sortedcontainers, rich, requests, psycopg, pandas, numpy
+- **Projects 4+ (current):** Go — learning Go through backend projects. New to Go, coming from Python.
+- Database: TimescaleDB (Postgres extension) running in Docker on port 6543
 - Working directory: learning_hft/
+
+## Transferable skills from HFT projects
+| HFT project | Backend skill |
+|---|---|
+| Project 1 (WebSocket feed) | Real-time streaming, pub/sub, data structures |
+| Project 2 (ETL pipeline) | Data pipelines, Postgres, Docker, idempotency |
+| Project 3 (Backtester) | SQL queries, data processing, pipeline pattern |
+
+### Project 4: REST API Service — IN PROGRESS (beginner/rest-api/)
+Building a REST API in Go serving candle data from TimescaleDB. First Go project.
+
+#### What I've built so far:
+- **main.go** — single-file API with:
+  - `GET /health` — health check returning `{"status": "ok"}`
+  - `GET /candles?symbol=BTCUSDT&limit=100&offset=0` — paginated candle query with input validation
+  - `Candle` struct with JSON tags matching DB columns
+  - `CandleResponse` wrapper struct with `data`, `limit`, `offset`, `count` for pagination metadata
+  - `isNumber()` validation for query params
+  - `connectToDatabase()` returning `(*pgx.Conn, error)` — caller owns and closes the connection
+- **Database:** pgx driver connecting to existing TimescaleDB on port 6543
+- **Dev tooling:** `air` for hot-reloading (`go install github.com/air-verse/air@latest`)
+
+#### Go concepts I now understand:
+- `package main` + `func main()` as entry point
+- Imports with full paths (`"net/http"`, `"encoding/json"`)
+- `:=` (declare+assign) vs `=` (reassign existing variable)
+- Structs = Python dataclasses. JSON tags control serialization (`json:"field_name"`)
+- Uppercase = exported (public), lowercase = unexported (private) — enforced by compiler
+- `if err != nil` pattern everywhere — Go has no exceptions
+- `defer` — schedules cleanup to run when the enclosing function returns, not when things hang
+- `context.Background()` — root context with no timeout/cancellation
+- `r.Context()` — request context, auto-cancels if client disconnects
+- `&` (address-of) for `rows.Scan()` — Scan needs to write into your variables
+- `_` to discard unused variables (e.g. `for _, ch := range s`)
+- Go refuses to compile with unused imports or variables
+- `http.HandleFunc` registers routes, handler signature is always `(http.ResponseWriter, *http.Request)`
+- `http.Error(w, msg, code)` + `return` for error responses
+- `json.NewEncoder(w).Encode(thing)` writes JSON directly to response
+- Closures capture outer variables (used for passing `conn` to handlers)
+- `nil` = Go's null. Zero values: `""` for string, `0` for int, `false` for bool
+- Slices (`[]Candle{}`) = Go's dynamic arrays, `append()` to add elements
+- Maps (`map[string]string{}`) = Go's dicts
+
+#### Database access patterns in Go (from alexedwards.net/blog/organising-database-access):
+1. **Global variable** — simplest, what we're using now. `var db *pgx.Conn` at package level. Fine for small apps, bad for testing.
+2. **Dependency injection via struct** — `type Server struct { db *pgx.Conn }`, handlers are methods on Server. Clear dependencies, testable. Best for most apps.
+3. **Dependency injection via closure** — handler functions return `http.HandlerFunc` that close over dependencies. Good for multi-package apps.
+4. **Wrapping the connection pool** — custom types like `BookModel` wrapping `sql.DB`. Most abstracted, best for complex apps with interfaces/mocking.
+5. **Request context** — `context.WithValue()`. Not recommended — loses type safety, hides dependencies.
+
+#### REST API design principles learned:
+- URL = noun (resource), HTTP method = verb (action)
+- Plural nouns (`/candles` not `/candle`), lowercase, hyphens
+- Query params for filtering (`?symbol=X`), pagination (`?limit=N&offset=M`)
+- Validate at the boundary — convert/reject bad input before it reaches the DB
+- Proper HTTP status codes: 200 OK, 400 Bad Request, 401 Unauthorized, 500 Internal
+- Always `return` after `http.Error()` — otherwise handler keeps executing
+- Wrap responses with metadata (`data`, `count`, `limit`, `offset`) for pagination
+- Always quote URLs with `&` in shell commands
+
+#### Known gaps/shortcuts:
+- Using global variable for DB access (should be struct-based for production)
+- Using `pgx.Conn` (single connection) instead of `pgxpool.Pool` (connection pool)
+- Connection string hardcoded
+- No authentication (JWT next)
+- No rate limiting
+- No tests
+
+#### Key design decisions:
+- Go over Python/FastAPI for backend projects (more employable for scalable systems)
+- `net/http` standard library for now (no router framework yet)
+- Single `main.go` file for simplicity while learning
+- Global `var db` pattern (simplest — will refactor to struct pattern when adding more dependencies)
+
+## Upcoming projects (scalable backend systems — in Go)
+
+### Project 4: REST API Service
+Build a proper API in Go with `net/http` / chi router, auth (JWT), pagination, filtering, rate limiting. Serve candle data from TimescaleDB over HTTP. Also serves as the "learn Go" project.
+
+### Project 5: Job Queue / Background Workers
+Producer/consumer pattern with Redis or RabbitMQ. Queue jobs, retry on failure, track status. Classic backend pattern.
+
+### Project 6: Real-time Notification Service
+Build a WebSocket *server* that fans out events to subscribers. Add pub/sub with Redis. Powers chat, dashboards, live feeds.
+
+### Project 7: Event-driven Pipeline with Kafka
+Distributed ETL. Multiple producers/consumers, guaranteed delivery, dead letter queues. What every data-heavy company runs.
+
+### Project 8: URL Shortener at Scale
+Classic system design interview question, actually built. Covers hashing, caching (Redis), analytics, rate limiting, horizontal scaling.
